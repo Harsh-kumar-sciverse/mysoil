@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:mysoil/services/bluetooth_services.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool bluetoothEnabled=false;
   bool isConnected=false;
+  String connectedToDeviceName='';
 
   @override
   Future<void> didChangeDependencies() async {
@@ -38,17 +42,61 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     // TODO: implement initState
     super.initState();
+    getStreamOfBluetooth();
+    getListOfBluetoothDevices();
     BluetoothServices.getBluetoothStatus().then((value) {
       setState(() {
         bluetoothEnabled=value??false;
       });
     });
   }
+  final flutterReactiveBle = FlutterReactiveBle();
+  void connect(){
+
+  }
+  List<BluetoothDevice> devices=[];
+
+  getListOfBluetoothDevices(){
+
+      FlutterBluetoothSerial.instance.startDiscovery().listen((event) {
+        print('bluetooth event ${event.device}');
+        devices.add(event.device);
+        setState(() {
+
+        });
+        // setState(() {
+        //   connectedToDeviceName='';
+        // });
+      });
+
+
+  }
+
+  getStreamOfBluetooth(){
+    FlutterBluetoothSerial.instance.onStateChanged().listen((event) {
+      print('event of bluetooth status ${event.isEnabled}');
+      if(event.isEnabled==false){
+        isConnected=false;
+       // bluetoothEnabled=true;
+        setState(() {
+
+        });
+      }
+
+    });
+  }
+
+
 
 
   @override
   Widget build(BuildContext context) {
+    print('devices ${devices.length}');
     return Scaffold(
+      floatingActionButton:isConnected? FloatingActionButton(onPressed: (){
+        getListOfBluetoothDevices();
+      },
+      child:const Icon(Icons.refresh)):Container(),
       appBar: AppBar(title:const Text('My Soil'),),
 
       body: Padding(
@@ -78,43 +126,103 @@ class _HomeScreenState extends State<HomeScreen> {
                     }),
               ],
             ),
-            const SizedBox(height: 50,),
-          isConnected? const ElevatedButton(onPressed: null, child: Text('Connected')):  ElevatedButton(onPressed: () async{
-
-            try{
-              BluetoothConnection.toAddress('08:B6:1F:6F:9F:AA').then((value) {
-                print('val ${value.isConnected}');
-                if(value.isConnected==true){
-                  setState(() {
-                    isConnected=true;
-                  });
-                  value.output.add(ascii.encode("connected"));
-                  value.input?.listen((Uint8List data) {
-                    print('Data incoming: ${ascii.decode(data)}');
-
-                    ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(ascii.decode(data))));
-                  }).onDone(() {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection done')));
-                  });
-
-
-                }else{
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to connect')));
-                }
-
-              });
-            }catch(e){
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-            }
-
-
-            }, child:const Text('Connect')),
+            const SizedBox(height: 20,),
+          isConnected?  ElevatedButton(onPressed: null, child: Text('Connected to $connectedToDeviceName')):
+          // ElevatedButton(onPressed: () async{
+          //   if(Platform.isIOS){
+          //     flutterReactiveBle.scanForDevices(  withServices: []).listen((device) {
+          //       //code for handling results
+          //       print('device ${device.id}');
+          //     });
+          //
+          //
+          //   }else{
+          //     try{
+          //       BluetoothConnection.toAddress('08:B6:1F:6F:9F:AA').then((value) {
+          //         print('val ${value.isConnected}');
+          //         if(value.isConnected==true){
+          //           setState(() {
+          //             isConnected=true;
+          //           });
+          //           value.output.add(ascii.encode("connected"));
+          //           value.input?.listen((Uint8List data) {
+          //             print('Data incoming: ${ascii.decode(data)}');
+          //
+          //             ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(ascii.decode(data))));
+          //           }).onDone(() {
+          //             setState(() {
+          //               isConnected=false;
+          //             });
+          //             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection removed.')));
+          //           });
+          //
+          //
+          //         }else{
+          //           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to connect')));
+          //         }
+          //
+          //       });
+          //     }catch(e){
+          //       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+          //     }
+          //   }
+          //
+          //
+          //
+          //
+          //   }, child:const Text('Connect')),
             const SizedBox(height: 20,),
            // ElevatedButton(onPressed: (){}, child:const Text('Receive')),
+            Expanded(
+              child: ListView.builder(
+                itemCount: devices.length,
+                  itemBuilder: (context,index){
+                return InkWell(
+                  onTap: (){
+                    try{
+                      BluetoothConnection.toAddress(devices[index].address).then((value) {
+                        print('val ${value.isConnected}');
+                        if(value.isConnected==true){
+                          setState(() {
+                            isConnected=true;
+                            connectedToDeviceName=devices[index].name??'';
+                            devices=[];
+                          });
+                          value.output.add(ascii.encode("connected"));
+                          value.input?.listen((Uint8List data) {
+                            print('Data incoming: ${ascii.decode(data)}');
+
+                            ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(ascii.decode(data))));
+                          }).onDone(() {
+                            setState(() {
+                              isConnected=false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection removed.')));
+                          });
+
+
+                        }else{
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to connect')));
+                        }
+
+                      });
+                    }catch(e){
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                    }
+                  },
+                  child: ListTile(
+                    title: Text('${devices[index].name??''} ${devices[index].isConnected==true?' Connected':''}'),
+                    subtitle: Text('${devices[index].address}'),
+
+                  ),
+                );
+              }),
+            )
 
           ],
         ),
       ),
+
     );
 
   }
